@@ -1,0 +1,799 @@
+-- The PluginInfo header contains some important information that Q-Sys Designer will parse when compiled.
+-- Id is a unique ID given to every plugin. While we typically use randomly generated UUID's, you can use anything here so long as it is unique
+--
+
+PluginInfo = {
+    Name = "ZeeVee~Zyper (0.0.0.0-master)", -- The tilde here indicates folder structure in the Shematic Elements pane
+    Version = "0.0.0.0-master",
+    Id = "qsysc.zeevee.zyper.0.0.0.0-master", -- show this is just a unique id. Show some commented out 'fun' unique ids
+    Description = "Control for Zeevee Zyper Management Platform",
+    ShowDebug = true,
+    Author = "Solo Works London"
+}
+
+-- Once you've drawn your plugin in Designer, you can determine what colors you use a lot. Save yourself some time by putting them in a table, and then simply calling them later.
+local Colors = {
+    zeevee_purple = {90, 56, 139},
+    White = {255, 255, 255},
+    Black = {0, 0, 0},
+    Red = {255, 0, 0},
+    Green = {0, 255, 0}
+}
+
+function GetColor(props)
+    return Colors.zeevee_purple
+end
+
+input_count = 512
+output_count = 512
+-- We can let users determine some of the plugin properties by exposing them here
+-- While this function can be very useful, it is completely optional and not always needed.
+-- If no Properties are set here, only the position and fill properties of your plugin will show in the Properties pane
+function GetProperties()
+    props = {
+        {
+            Name = "IP Address",
+            Type = "string",
+            Value = ""
+        },
+        {
+            Name = "Port",
+            Type = "integer",
+            Min = 1,
+            Max = 100,
+            Value = 23
+        },
+        {
+            Name = "Username",
+            Type = "string",
+            Value = ""
+        },
+        {
+            Name = "Password",
+            Type = "string",
+            Value = ""
+        },
+        {
+            Name = "Number of encoders",
+            Type = "integer",
+            Min = 1,
+            Max = 100,
+            Value = 2
+        },
+        {
+            Name = "Number of decoders",
+            Type = "integer",
+            Min = 1,
+            Max = 100,
+            Value = 2
+        },
+        {
+            Name = "Number of multiviews",
+            Type = "integer",
+            Min = 0,
+            Max = 100,
+            Value = 2
+        }
+    }
+    return props
+end
+
+-- The below function is optional (like GetProperties() is), but it can allow further customization of what users can and can't do with your plugin.
+-- Another application of this is if you have different input/output types for different models, and want those properties to be dynamic in the Properties pane
+function RectifyProperties(props)
+    return props
+end
+
+-- The below function is where you will populate the controls for your plugin.
+-- If you've written some of the Runtime code already, simply use the control names you populated in Text Controller/Control Script, and use their Properties to inform the values here
+-- ControlType can be Button, Knob, Indicator or Text
+-- ButtonType ( ControlType == Button ) can be Momentary, Toggle or Trigger
+-- IndicatorType ( ControlType == Indicator ) can be Led, Meter, Text or Status
+-- ControlUnit ( ControlType == Knob ) can be Hz, Float, Integer, Pan, Percent, Position or Seconds
+function GetControls(props)
+    ctls = {
+        -- System Pins
+        {
+            Name = "online",
+            ControlType = "Indicator",
+            IndicatorType = "Led",
+            PinStyle = "Output",
+            Count = 1,
+            UserPin = true
+        },
+        {
+            Name = "ip_address",
+            ControlType = "Indicator",
+            IndicatorType = "Text",
+            PinStyle = "Both",
+            Count = 1,
+            UserPin = true
+        }
+    }
+    for s = 1, props["Number of encoders"].Value do
+        table.insert(
+            ctls,
+            {
+                Name = "source_signal_" .. s,
+                ControlType = "Indicator",
+                IndicatorType = "Led",
+                PinStyle = "Output",
+                UserPin = true
+            }
+        )
+        table.insert(
+            ctls,
+            {
+                Name = "encoder_name_" .. s,
+                ControlType = "Text",
+                UserPin = false
+            }
+        )
+        table.insert(
+            ctls,
+            {
+                Name = "join_type_" .. s,
+                ControlType = "Text",
+                UserPin = true,
+                PinStyle = "Input"
+            }
+        )
+    end
+    for i = 1, props["Number of decoders"].Value do
+        table.insert(
+            ctls,
+            {
+                Name = "output_" .. i,
+                ControlType = "Text",
+                PinStyle = "Both",
+                UserPin = true
+            }
+        )
+        table.insert(
+            ctls,
+            {
+                Name = "decoder_name_" .. i,
+                ControlType = "Text",
+                UserPin = false
+            }
+        )
+        for s = 1, props["Number of encoders"].Value do
+            table.insert(
+                ctls,
+                {
+                    Name = "input_" .. s .. "-output_" .. i,
+                    ControlType = "Button",
+                    ButtonType = "Toggle",
+                    PinStyle = "Both",
+                    UserPin = true
+                }
+            )
+        end
+    end
+    for i = 1, props["Number of multiviews"].Value do
+        table.insert(
+            ctls,
+            {
+                Name = "multiview_" .. i,
+                ControlType = "Text",
+                PinStyle = "Both",
+                UserPin = true
+            }
+        )
+        table.insert(
+            ctls,
+            {
+                Name = "multiview_name_" .. i,
+                ControlType = "Text",
+                UserPin = false
+            }
+        )
+    end
+    for i = 1, props["Number of decoders"].Value do
+        for s = 1, props["Number of multiviews"].Value do
+            table.insert(
+                ctls,
+                {
+                    Name = "multiview_" .. s .. "-output_" .. i,
+                    ControlType = "Button",
+                    ButtonType = "Toggle",
+                    PinStyle = "Both",
+                    UserPin = true
+                }
+            )
+        end
+    end
+    return ctls
+end
+
+-- Variable holding Page Names for ease
+local pagenames = {"Display", "Setup"}
+
+-- This function allows you to populate pages in your plugin.
+function GetPages()
+    pages = {}
+    for ix, name in ipairs(pagenames) do
+        table.insert(pages, {name = pagenames[ix]})
+    end
+    return pages
+end
+
+-- This function allows you to layout pages in your plugin.
+function GetControlLayout(props)
+    local layout, graphics = {}, {}
+
+    input_count = props["Number of encoders"].Value
+    output_count = props["Number of decoders"].Value
+    multiview_count = props["Number of multiviews"].Value
+
+    local title_size = {224, 32}
+    local btn_size = {32, 24}
+    local status_groupbox_size = {title_size[1], 4 * btn_size[2]}
+    local matrix_groupbox_position = {0, title_size[2] + status_groupbox_size[2] + (0.5 * btn_size[2])}
+    local matrix_groupbox_size = {
+        (2.5 * btn_size[1]) + (output_count * btn_size[1]),
+        (4 * btn_size[2]) + (input_count * btn_size[2])
+    }
+
+    if multiview_count > 0 then
+        matrix_groupbox_size[2] = matrix_groupbox_size[2] + ((1 + multiview_count) * btn_size[2])
+    end
+
+    local current_page = pagenames[props["page_index"].Value]
+    if current_page == "Display" then
+        graphics = {
+            {
+                Type = "Header",
+                Text = "Zeevee Zyper",
+                HTextAlign = "Center",
+                Color = Colors.zeevee_purple,
+                FontSize = 16,
+                Position = {0, 0},
+                Size = title_size
+            },
+            {
+                Type = "GroupBox", -- This is the overall groupbox that will give the plugin a more 'contained' look
+                Text = "Status",
+                HTextAlign = "Left",
+                Fill = Colors.White,
+                CornerRadius = 8,
+                StrokeColor = Colors.zeevee_purple,
+                Color = Colors.zeevee_purple,
+                StrokeWidth = 2,
+                Position = {0, title_size[2]},
+                Size = status_groupbox_size
+            },
+            {
+                Type = "Text",
+                Text = "Online:",
+                Font = "Roboto",
+                FontSize = 12,
+                FontStyle = "Bold",
+                HTextAlign = "Right",
+                Color = Colors.Black,
+                Position = {0, title_size[2] + (0.5 * btn_size[2])},
+                Size = {3 * btn_size[1], btn_size[2]}
+            },
+            {
+                Type = "Text",
+                Text = "IP Address:",
+                Font = "Roboto",
+                FontSize = 12,
+                FontStyle = "Bold",
+                HTextAlign = "Right",
+                Color = Colors.Black,
+                Position = {0, title_size[2] + (1.5 * btn_size[2])},
+                Size = {3 * btn_size[1], btn_size[2]}
+            },
+            {
+                Type = "GroupBox",
+                Text = "Matrix",
+                HTextAlign = "Left",
+                Fill = Colors.White,
+                CornerRadius = 8,
+                StrokeColor = Colors.zeevee_purple,
+                Color = Colors.zeevee_purple,
+                StrokeWidth = 2,
+                Position = matrix_groupbox_position,
+                Size = matrix_groupbox_size
+            },
+            {
+                Type = "Text",
+                Text = "Signal",
+                FontSize = 10,
+                Position = {matrix_groupbox_position[1], (matrix_groupbox_position[2] + (2.5 * btn_size[2]))},
+                Size = btn_size
+            }
+        }
+        for i = 1, input_count do
+            table.insert(
+                graphics,
+                {
+                    Type = "Text",
+                    Text = "In" .. i,
+                    Position = {
+                        (matrix_groupbox_position[1] + btn_size[1]),
+                        (matrix_groupbox_position[2] + (2.5 * btn_size[2])) + (i * btn_size[2])
+                    },
+                    Size = btn_size
+                }
+            )
+        end
+        for i = 1, output_count do
+            table.insert(
+                graphics,
+                {
+                    Type = "Text",
+                    Text = "Out\r" .. i,
+                    Position = {btn_size[1] + (i * btn_size[1]), (matrix_groupbox_position[2] + (1.5 * btn_size[2]))},
+                    Size = btn_size
+                }
+            )
+        end
+        -- System
+        layout["online"] = {
+            PrettyName = "System~Online",
+            Style = "Indicator",
+            Color = {0, 255, 0},
+            Position = {3 * btn_size[1], title_size[2] + (0.5 * btn_size[2])},
+            Size = {btn_size[2], btn_size[2]}
+        }
+        layout["ip_address"] = {
+            PrettyName = "System~IP Address",
+            Style = "TextBox",
+            Position = {3 * btn_size[1], title_size[2] + (1.5 * btn_size[2])},
+            Size = {3 * btn_size[1], btn_size[2]}
+        }
+        -- Matrix crosspoints
+        for i = 1, output_count do -- For each output
+            layout["output_" .. i] = {
+                PrettyName = "Output " .. i .. "~Select",
+                Style = "Indicator",
+                Color = {255, 255, 255},
+                Position = {btn_size[1] + (i * btn_size[1]), matrix_groupbox_position[2] + (2.5 * btn_size[2])},
+                Size = btn_size
+            }
+            for s = 1, input_count do -- For each input
+                layout["input_" .. s .. "-output_" .. i] = {
+                    PrettyName = "Output " .. i .. "~In" .. s .. " -> Out" .. i,
+                    Style = "Button",
+                    Legend = tostring(s),
+                    Position = {
+                        btn_size[1] + (i * btn_size[1]),
+                        matrix_groupbox_position[2] + (2.5 * btn_size[2]) + (s * btn_size[2])
+                    },
+                    Size = btn_size
+                }
+            end
+        end
+        for i = 1, input_count do
+            layout["source_signal_" .. i] = {
+                PrettyName = string.format("Signal Presence~Source %02i", i),
+                Style = "Indicator",
+                Color = {0, 255, 0},
+                Position = {(matrix_groupbox_position[1] + 4), matrix_groupbox_position[2] + ((i + 2.5) * btn_size[2])},
+                Size = {24, 24}
+            }
+        end
+        if multiview_count > 0 then
+            table.insert(
+                graphics,
+                {
+                    Type = "Header",
+                    Text = "Multiview",
+                    HTextAlign = "Left",
+                    Color = Colors.zeevee_purple,
+                    FontSize = 12,
+                    Position = {
+                        matrix_groupbox_position[1],
+                        matrix_groupbox_position[2] + ((3.5 + input_count) * btn_size[2])
+                    },
+                    Size = {matrix_groupbox_size[1], btn_size[2]}
+                }
+            )
+            for i = 1, multiview_count do
+                table.insert(
+                    graphics,
+                    {
+                        Type = "Text",
+                        Text = "Multiview " .. i,
+                        FontSize = 10,
+                        Position = {
+                            matrix_groupbox_position[1],
+                            matrix_groupbox_position[2] + ((3.5 + input_count) * btn_size[2]) + (i * btn_size[2])
+                        },
+                        Size = {2 * btn_size[1], btn_size[2]}
+                    }
+                )
+            end
+            for i = 1, output_count do
+                for s = 1, multiview_count do
+                    layout["multiview_" .. s .. "-output_" .. i] = {
+                        PrettyName = "Output " .. i .. "~Multiview" .. s .. " -> Out" .. i,
+                        Style = "Button",
+                        Legend = "M" .. tostring(s),
+                        Position = {
+                            btn_size[1] + (i * btn_size[1]),
+                            matrix_groupbox_position[2] + ((3.5 + input_count) * btn_size[2]) + (s * btn_size[2])
+                        },
+                        Size = btn_size
+                    }
+                end
+            end
+        end
+    elseif current_page == "Setup" then
+        title_size[1] = 16 * btn_size[1]
+        graphics = {
+            {
+                Type = "Header",
+                Text = "Zeevee Zyper",
+                HTextAlign = "Center",
+                Color = Colors.zeevee_purple,
+                FontSize = 16,
+                Position = {0, 0},
+                Size = title_size
+            },
+            {
+                Type = "GroupBox",
+                Text = "Encoder Setup",
+                Position = {0, title_size[2]},
+                HTextAlign = "Left",
+                TextSize = 14,
+                Fill = Colors.White,
+                CornerRadius = 8,
+                StrokeColor = Colors.zeevee_purple,
+                Color = Colors.zeevee_purple,
+                StrokeWidth = 2,
+                IsBold = true,
+                Size = {16 * btn_size[1], (1.5 + input_count) * btn_size[2]}
+            }
+        }
+        for i = 1, input_count do
+            layout["encoder_name_" .. i] = {
+                PrettyName = string.format("Encoder~%i", i), -- The Tilde (~) creates a folder break for the Control Pin list
+                Style = "Text",
+                Margin = 3,
+                Position = {4 * btn_size[1], (title_size[2] + btn_size[2]) + (btn_size[2] * (i - 1))},
+                Size = {4 * btn_size[1], btn_size[2]}
+            }
+            layout["join_type_" .. i] = {
+                PrettyName = string.format("Encoder Join Type~%i", i), -- The Tilde (~) creates a folder break for the Control Pin list
+                Style = "ComboBox",
+                Margin = 3,
+                Position = {12 * btn_size[1], (title_size[2] + btn_size[2]) + (btn_size[2] * (i - 1))},
+                Size = {4 * btn_size[1], btn_size[2]},
+                TextFontSize = 14
+            }
+            table.insert(
+                graphics,
+                {
+                    Type = "Text",
+                    Text = "Encoder " .. i .. " Name:",
+                    HTextAlign = "Right",
+                    Position = {0, (title_size[2] + btn_size[2]) + (btn_size[2] * (i - 1))},
+                    Size = {4 * btn_size[1], btn_size[2]}
+                }
+            )
+            table.insert(
+                graphics,
+                {
+                    Type = "Text",
+                    Text = "Join Type:",
+                    HTextAlign = "Right",
+                    Position = {8.5 * btn_size[1], (title_size[2] + btn_size[2]) + (btn_size[2] * (i - 1))},
+                    Size = {3.5 * btn_size[1], btn_size[2]}
+                }
+            )
+        end
+        table.insert(
+            graphics,
+            {
+                Type = "GroupBox",
+                Text = "Decoder Setup",
+                Position = {0, (title_size[2] + (2 * btn_size[2])) + (btn_size[2] * (input_count))},
+                HTextAlign = "Left",
+                TextSize = 14,
+                Fill = Colors.White,
+                CornerRadius = 8,
+                StrokeColor = Colors.zeevee_purple,
+                Color = Colors.zeevee_purple,
+                StrokeWidth = 2,
+                IsBold = true,
+                Size = {8 * btn_size[1], (1.5 + output_count) * btn_size[2]}
+            }
+        )
+        for i = 1, output_count do
+            layout["decoder_name_" .. i] = {
+                PrettyName = string.format("Decoder~%i", i), -- The Tilde (~) creates a folder break for the Control Pin list
+                Style = "Text",
+                Margin = 3,
+                Position = {
+                    4 * btn_size[1],
+                    (title_size[2] + (3 * btn_size[2])) + (btn_size[2] * (input_count)) + (btn_size[2] * (i - 1))
+                },
+                Size = {4 * btn_size[1], btn_size[2]}
+            }
+            table.insert(
+                graphics,
+                {
+                    Type = "Text",
+                    Text = "Decoder " .. i .. " Name:",
+                    HTextAlign = "Right",
+                    Position = {
+                        0,
+                        (title_size[2] + (3 * btn_size[2])) + (btn_size[2] * (input_count)) + (btn_size[2] * (i - 1))
+                    },
+                    Size = {4 * btn_size[1], btn_size[2]}
+                }
+            )
+        end
+        if multiview_count > 0 then
+            table.insert(
+                graphics,
+                {
+                    Type = "GroupBox",
+                    Text = "Multiview Setup",
+                    Position = {8.5 * btn_size[1], (title_size[2] + (2 * btn_size[2])) + (btn_size[2] * (input_count))},
+                    HTextAlign = "Left",
+                    TextSize = 14,
+                    Fill = Colors.White,
+                    CornerRadius = 8,
+                    StrokeColor = Colors.zeevee_purple,
+                    Color = Colors.zeevee_purple,
+                    StrokeWidth = 2,
+                    IsBold = true,
+                    Size = {7.5 * btn_size[1], (1.5 + multiview_count) * btn_size[2]}
+                }
+            )
+            for i = 1, multiview_count do
+                layout["multiview_name_" .. i] = {
+                    PrettyName = string.format("Multiview~%i", i), -- The Tilde (~) creates a folder break for the Control Pin list
+                    Style = "Text",
+                    Margin = 3,
+                    Position = {
+                        12 * btn_size[1],
+                        (title_size[2] + (3 * btn_size[2])) + (btn_size[2] * (input_count)) + (btn_size[2] * (i - 1))
+                    },
+                    Size = {4 * btn_size[1], btn_size[2]}
+                }
+                table.insert(
+                    graphics,
+                    {
+                        Type = "Text",
+                        Text = "Multiview " .. i .. " Name:",
+                        HTextAlign = "Right",
+                        Position = {
+                            8.5 * btn_size[1],
+                            (title_size[2] + (3 * btn_size[2])) + (btn_size[2] * (input_count)) +
+                                (btn_size[2] * (i - 1))
+                        },
+                        Size = {3.5 * btn_size[1], btn_size[2]}
+                    }
+                )
+            end
+        end
+    end
+    return layout, graphics
+end
+
+if Controls then
+    input_count = Properties["Number of encoders"].Value
+    output_count = Properties["Number of decoders"].Value
+    multiview_count = Properties["Number of multiviews"].Value
+
+    encoder_list, join_type_list, decoder_list, multiview_list = {}, {}, {}, {}
+
+    -- Local Structure for holding State
+    zeevee = {
+        Host = "",
+        Port = 23,
+        Rx = ""
+    }
+
+    -- Build TCP Client
+    conn = TcpSocket.New()
+    conn.ReadTimeout = 0
+    conn.WriteTimeout = 0
+    conn.ReconnectTimeout = 5
+
+    -- Create and setup the Communications Timeout
+    timerComms = Timer.New()
+    timerComms.EventHandler = function(timer)
+        timer:Stop()
+        Controls.online.Boolean = false
+        print("Connection Timed Out")
+        conn:Disconnect()
+        fnConnect()
+    end
+
+    -- Create and setup Polling
+    timerPoll = Timer.New()
+
+    timerPoll.EventHandler = function(timer)
+        fnPoll()
+    end
+
+    function fnInitPoll(activate)
+        timerPoll:Stop()
+        if activate == true then
+            timerPoll:Start(20)
+        end
+    end
+
+    function fnPoll()
+        for i = 1, input_count do
+            fnSend("show device connections")
+            fnSend("show device status all")
+        end
+    end
+
+    -- Data Sending Helper Function
+    function fnSend(cmd)
+        print("-->zeevee::" .. cmd)
+        conn:Write(cmd .. "\r\n")
+        fnInitPoll(true)
+    end
+
+    function fnInit()
+        fnSend("show device connections")
+        fnSend("show device status all")
+    end
+
+    function matrix_feedback(inp, outp)
+        Controls["output_" .. outp].String = inp
+        for i = 1, input_count do
+            Controls["input_" .. i .. "-output_" .. outp].Boolean = false
+        end
+        for i = 1, multiview_count do
+            Controls["multiview_" .. i .. "-output_" .. outp].Boolean = false
+        end
+        if inp ~= "0" then
+            if tostring(inp:sub(1, 1)) == "M" then -- Multiview
+                local mv = string.match(inp, "M(%d+)") -- this needs testing
+                Controls["multiview_" .. mv .. "-output_" .. outp].Boolean = true
+            else
+                Controls["input_" .. inp .. "-output_" .. outp].Boolean = true
+            end
+        end
+    end
+
+    function set_join(input, output, join_type)
+        local command = 'join "' .. input .. '" ' .. output .. " " .. join_type
+        fnSend(command)
+    end
+
+    -- Setup Utility Callbacks as required
+    conn.Connected = function(conn)
+        print("TCP socket is Connected")
+        -- Set a timer to wait for connection to establish
+        Timer.CallAfter(fnInit, 1)
+        Controls["online"].Boolean = true
+    end
+    conn.Reconnect = function(conn)
+        print("TCP socket is Reconnecting")
+    end
+    conn.Closed = function(conn)
+        print("TCP socket was closed by the remote end")
+        fnInitPoll(false)
+    end
+    conn.Error = function(conn, err)
+        print("TCP socket had an error ::")
+        print(err)
+    end
+    conn.Timeout = function(conn, err)
+        print("TCP socket had an timeout ::")
+        print(err)
+    end
+
+    -- Helper Function - Open TCP Connection
+    function fnConnect()
+        -- Open Connection
+        conn:Connect(zeevee.Host, zeevee.Port)
+        print("TCP socket is Connecting")
+        -- Set IP address value
+        if Controls.ip_address then
+            Controls.ip_address.String = zeevee.Host .. ":" .. zeevee.Port
+        end
+    end
+    local function split(str, delim)
+        local result = {}
+        for part in str:gmatch("[^" .. delim .. "]+") do
+            result[#result + 1] = part
+        end
+        return result
+    end
+    -- Setup Data Callbacks as required
+    conn.Data = function(conn)
+        -- Read out lines from the buffer
+        line = conn:ReadLine(TcpSocket.EOL.Any)
+        print("line: " .. line)
+        while (line ~= nil) do
+            -- Print Line
+            print(line)
+            if line:sub(1, 4) == "@ERR" then
+            elseif line:sub(1, 5) == "@GSVC" then
+            elseif line:sub(1, 6) == "@GSS,1" then
+                -- source signal
+            elseif line:sub(1, 11) == "" then
+            -- matrix feedback
+            end
+            -- Get New Line
+            line = conn:ReadLine(TcpSocket.EOL.Any)
+        end
+    end
+    -- Set IP address from Properties if present
+    if Properties then
+        if Properties["IP Address"].Value ~= "" then
+            zeevee.Host = Properties["IP Address"].Value
+            fnConnect()
+        else
+            print("IP Address Property Not Set")
+        end
+    end
+    -- Loop through all Controls and setup Event Handlers
+    for i = 1, output_count do
+        Controls["output_" .. i].EventHandler = function()
+            if string.sub(Controls["output_" .. i].String, 1, 1) == "M" then
+                local mv = string.match(Controls["output_" .. i].String, "M(%d+)")
+                set_join(multiview_list[mv], decoder_list[i], "multiview")
+            else
+                local v = Controls["output_" .. i].String
+                set_join(encoder_list[v], decoder_list[i], join_type_list[v])
+            end
+        end
+            Controls["decoder_name_" .. i].EventHandler = function()
+                decoder_list[i] = Controls["decoder_name_" .. i].String
+            end
+            Controls["decoder_name_" .. i].String = "decoder" .. i
+            for p = 1, input_count do
+                Controls["input_" .. p .. "-output_" .. i].EventHandler = function()
+                    if Controls["input_" .. p .. "-output_" .. i].Boolean then
+                        Controls["output_" .. i].String = tostring(p)
+                        set_join(encoder_list[p], decoder_list[i], join_type_list[p])
+                    else
+                        Controls["output_" .. i].String = "0"
+                        set_join("none", decoder_list[i], "fast-switched")
+                    end
+                end
+            end
+            for p = 1, multiview_count do
+                Controls["multiview_" .. p .. "-output_" .. i].EventHandler = function()
+                    if Controls["multiview_" .. p .. "-output_" .. i].Boolean then
+                        Controls["output_" .. i].String = "M" .. tostring(p)
+                        set_join(multiview_list[p], decoder_list[i], "multiview")
+                    else
+                        Controls["output_" .. i].String = "0"
+                        set_join("none", decoder_list[i], "fast-switched")
+                    end
+                end
+            end
+        end
+    for i = 1, input_count do
+        Controls["encoder_name_" .. i].EventHandler = function()
+            encoder_list[i] = Controls["encoder_name_" .. i].String
+        end
+        Controls["encoder_name_" .. i].String = "encoder" .. i
+        Controls["join_type_" .. i].Choices = {
+            "analog-audio",
+            "fast-switched",
+            "genlocked",
+            "genlocked-scale",
+            "hdmi-downmix-audio",
+            "usb",
+            "manual"
+        }
+        if Controls["join_type_" .. i].String == "" then
+            Controls["join_type_" .. i].String = "fast-switched"
+        end
+        join_type_list[i] = "fast-switched"
+        Controls["join_type_" .. i].EventHandler = function()
+            join_type_list[i] = Controls["join_type_" .. i].String
+        end
+    end
+    for i = 1, multiview_count do
+        Controls["multiview_name_" .. i].EventHandler = function()
+            multiview_list[i] = Controls["multiview_name_" .. i].String
+        end
+        Controls["multiview_name_" .. i].String = "multiview" .. i
+    end
+end
