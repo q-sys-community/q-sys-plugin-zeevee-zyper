@@ -43,7 +43,7 @@ function GetProperties()
             Max = 100,
             Value = 23
         },
-        {
+        --[[{
             Name = "Username",
             Type = "string",
             Value = ""
@@ -52,7 +52,7 @@ function GetProperties()
             Name = "Password",
             Type = "string",
             Value = ""
-        },
+        },]]--
         {
             Name = "Number of encoders",
             Type = "integer",
@@ -462,7 +462,7 @@ function GetControlLayout(props)
                 Margin = 3,
                 Position = {12 * btn_size[1], (title_size[2] + btn_size[2]) + (btn_size[2] * (i - 1))},
                 Size = {4 * btn_size[1], btn_size[2]},
-                TextFontSize = 14
+                TextFontSize = 10
             }
             table.insert(
                 graphics,
@@ -658,7 +658,7 @@ if Controls then
     end
 
     function set_join(input, output, join_type)
-        local command = 'join "' .. input .. '" ' .. output .. " " .. join_type
+        local command = "join " .. input .. " " .. output .. " " .. join_type
         fnSend(command)
     end
 
@@ -741,38 +741,40 @@ if Controls then
                 set_join(encoder_list[v], decoder_list[i], join_type_list[v])
             end
         end
-            Controls["decoder_name_" .. i].EventHandler = function()
-                decoder_list[i] = Controls["decoder_name_" .. i].String
-            end
-            Controls["decoder_name_" .. i].String = "decoder" .. i
-            for p = 1, input_count do
-                Controls["input_" .. p .. "-output_" .. i].EventHandler = function()
-                    if Controls["input_" .. p .. "-output_" .. i].Boolean then
-                        Controls["output_" .. i].String = tostring(p)
-                        set_join(encoder_list[p], decoder_list[i], join_type_list[p])
-                    else
-                        Controls["output_" .. i].String = "0"
-                        set_join("none", decoder_list[i], "fast-switched")
-                    end
-                end
-            end
-            for p = 1, multiview_count do
-                Controls["multiview_" .. p .. "-output_" .. i].EventHandler = function()
-                    if Controls["multiview_" .. p .. "-output_" .. i].Boolean then
-                        Controls["output_" .. i].String = "M" .. tostring(p)
-                        set_join(multiview_list[p], decoder_list[i], "multiview")
-                    else
-                        Controls["output_" .. i].String = "0"
-                        set_join("none", decoder_list[i], "fast-switched")
-                    end
+        Controls["decoder_name_" .. i].String = "decoder" .. i
+        decoder_list[i] = Controls["decoder_name_" .. i].String
+        Controls["decoder_name_" .. i].EventHandler = function()
+            decoder_list[i] = Controls["decoder_name_" .. i].String
+        end
+        for p = 1, input_count do
+            Controls["input_" .. p .. "-output_" .. i].EventHandler = function()
+                if Controls["input_" .. p .. "-output_" .. i].Boolean then
+                    Controls["output_" .. i].String = tostring(p)
+                    set_join(encoder_list[p], decoder_list[i], join_type_list[p])
+                else
+                    Controls["output_" .. i].String = "0"
+                    set_join("none", decoder_list[i], "fast-switched")
                 end
             end
         end
+        for p = 1, multiview_count do
+            Controls["multiview_" .. p .. "-output_" .. i].EventHandler = function()
+                if Controls["multiview_" .. p .. "-output_" .. i].Boolean then
+                    Controls["output_" .. i].String = "M" .. tostring(p)
+                    set_join(multiview_list[p], decoder_list[i], "multiview")
+                else
+                    Controls["output_" .. i].String = "0"
+                    set_join("none", decoder_list[i], "fast-switched")
+                end
+            end
+        end
+    end
     for i = 1, input_count do
+        Controls["encoder_name_" .. i].String = "encoder" .. i
+        encoder_list[i] = Controls["encoder_name_" .. i].String
         Controls["encoder_name_" .. i].EventHandler = function()
             encoder_list[i] = Controls["encoder_name_" .. i].String
         end
-        Controls["encoder_name_" .. i].String = "encoder" .. i
         Controls["join_type_" .. i].Choices = {
             "analog-audio",
             "fast-switched",
@@ -791,9 +793,10 @@ if Controls then
         end
     end
     for i = 1, multiview_count do
+        Controls["multiview_name_" .. i].String = "multiview" .. i
+        multiview_list[i] = Controls["multiview_name_" .. i].String
         Controls["multiview_name_" .. i].EventHandler = function()
             multiview_list[i] = Controls["multiview_name_" .. i].String
         end
-        Controls["multiview_name_" .. i].String = "multiview" .. i
     end
 end
